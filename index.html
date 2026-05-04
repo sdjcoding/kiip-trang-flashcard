@@ -279,6 +279,15 @@
   }
   .nav button:hover, .nav button:active { background: #334155; }
   .nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .nav button.play-btn {
+    flex: 0.7;
+    background: #10b981;
+    border-color: #10b981;
+    color: #fff;
+    font-weight: 500;
+  }
+  .nav button.play-btn:hover, .nav button.play-btn:active { background: #059669; border-color: #059669; }
+  .nav button.play-btn.muted { background: #1e293b; border-color: #334155; color: #64748b; }
 
   .keyboard-hint {
     font-size: 0.65rem;
@@ -433,6 +442,7 @@
 
 <div class="nav">
   <button id="prevBtn">◀ 이전</button>
+  <button id="navReplayBtn" class="play-btn">▶ 재생</button>
   <button id="nextBtn">다음 ▶</button>
 </div>
 
@@ -620,6 +630,11 @@ function updateCardAudioButtons() {
       btn.classList.add('audio-off');
     }
   });
+  const navBtn = document.getElementById('navReplayBtn');
+  if (navBtn) {
+    navBtn.classList.toggle('muted', !audioOn);
+    navBtn.disabled = !audioOn;
+  }
 }
 
 function toggleAudio() {
@@ -670,9 +685,8 @@ function render() {
         <div class="card-footer">
           <span class="hint">탭/Space → 답변</span>
           <div class="card-audio">
-            <span class="status" id="audioStatusFront">대기</span>
+            <span class="status">대기</span>
             <button class="${audioOnClass} card-audio-toggle" title="음성 ON/OFF (M)">${audioLabel}</button>
-            <button class="card-audio-replay" title="재생 (R)">▶</button>
           </div>
         </div>
       </div>
@@ -711,18 +725,9 @@ function render() {
   // 즐겨찾기 버튼 클릭
   container.querySelector('#favBtnFront').onclick = (e) => { e.stopPropagation(); toggleFav(c.no); };
   container.querySelector('#favBtnBack').onclick = (e) => { e.stopPropagation(); toggleFav(c.no); };
-  // 카드 내 음성 컨트롤
+  // 카드 내 음성 토글
   container.querySelectorAll('.card-audio-toggle').forEach(btn => {
     btn.onclick = (e) => { e.stopPropagation(); toggleAudio(); };
-  });
-  container.querySelectorAll('.card-audio-replay').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      if (!audioOn) return;
-      const card = document.getElementById('cardEl');
-      if (card.classList.contains('flipped')) playAudio(`audio/a${c.no}.mp3`);
-      else playAudio(`audio/q${c.no}.mp3`);
-    };
   });
 
   wrapper.appendChild(container);
@@ -760,6 +765,15 @@ document.getElementById('prevBtn').onclick = prev;
 document.getElementById('nextBtn').onclick = next;
 document.getElementById('shuffleBtn').onclick = shuffle;
 
+function replayCurrent() {
+  if (!audioOn || !filtered.length) return;
+  const card = document.getElementById('cardEl');
+  const c = filtered[page];
+  if (card && card.classList.contains('flipped')) playAudio(`audio/a${c.no}.mp3`);
+  else playAudio(`audio/q${c.no}.mp3`);
+}
+document.getElementById('navReplayBtn').onclick = replayCurrent;
+
 document.addEventListener('keydown', (e) => {
   if (document.getElementById('catModal').classList.contains('show')) {
     if (e.key === 'Escape') closeCatModal();
@@ -776,13 +790,7 @@ document.addEventListener('keydown', (e) => {
     }
   } else if (e.key === 'ArrowLeft') prev();
   else if (e.key === 'ArrowRight') next();
-  else if (e.key === 'r' || e.key === 'R') {
-    if (!audioOn || !filtered.length) return;
-    const card = document.getElementById('cardEl');
-    const c = filtered[page];
-    if (card.classList.contains('flipped')) playAudio(`audio/a${c.no}.mp3`);
-    else playAudio(`audio/q${c.no}.mp3`);
-  }
+  else if (e.key === 'r' || e.key === 'R') replayCurrent();
   else if (e.key === 'm' || e.key === 'M') toggleAudio();
   else if (e.key === 'f' || e.key === 'F') {
     if (filtered.length) toggleFav(filtered[page].no);

@@ -66,8 +66,8 @@
   .pill-btn.audio-on { background: #10b981; border-color: #10b981; color: #fff; }
   .pill-btn.audio-off { opacity: 0.6; }
   .pill-btn.fav-active { background: #f59e0b; border-color: #f59e0b; color: #fff; }
-  .pill-btn.quick-filter.active[data-cat="⭐ 토픽스쿨 전체"] { background: #3b82f6; border-color: #3b82f6; color: #fff; }
-  .pill-btn.quick-filter.active[data-cat="⭐ 시대에듀 전체"] { background: #c0504d; border-color: #c0504d; color: #fff; }
+  .pill-btn.channel-btn.active#topiksBtn { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .pill-btn.channel-btn.active#sidaeBtn { background: #c0504d; border-color: #c0504d; color: #fff; }
   .pill-btn.quick-filter.active[data-cat="⭐ 즐겨찾기"] { background: #f59e0b; border-color: #f59e0b; color: #fff; }
   .pill-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
@@ -252,6 +252,7 @@
   .card-audio button:hover, .card-audio button:active { background: #334155; }
   .card-audio button.audio-on { background: #10b981; border-color: #10b981; color: #fff; }
   .card-audio button.audio-off { opacity: 0.5; }
+  .card-audio button.shuffle-on { background: #8b5cf6; border-color: #8b5cf6; color: #fff; }
   .card-audio .status {
     font-size: 0.65rem;
     color: #64748b;
@@ -280,7 +281,7 @@
   .nav button:hover, .nav button:active { background: #334155; }
   .nav button:disabled { opacity: 0.4; cursor: not-allowed; }
   .nav button.play-btn {
-    flex: 0.7;
+    flex: 0.9;
     background: #10b981;
     border-color: #10b981;
     color: #fff;
@@ -288,6 +289,8 @@
   }
   .nav button.play-btn:hover, .nav button.play-btn:active { background: #059669; border-color: #059669; }
   .nav button.play-btn.muted { background: #1e293b; border-color: #334155; color: #64748b; }
+  .nav button.play-btn.playing { background: #ef4444; border-color: #ef4444; }
+  .nav button.play-btn.playing:hover { background: #dc2626; border-color: #dc2626; }
 
   .keyboard-hint {
     font-size: 0.65rem;
@@ -425,10 +428,9 @@
 
 <div class="toolbar">
   <button class="pill-btn" id="catBtn">📂 <span id="catBtnLabel">전체</span></button>
-  <button class="pill-btn quick-filter" data-cat="⭐ 토픽스쿨 전체" title="토픽스쿨 47문항">📘 토픽스쿨</button>
-  <button class="pill-btn quick-filter" data-cat="⭐ 시대에듀 전체" title="시대에듀 30문항">📕 시대에듀</button>
+  <button class="pill-btn channel-btn" id="topiksBtn" title="토픽스쿨 47문항">📘 토픽스쿨</button>
+  <button class="pill-btn channel-btn" id="sidaeBtn" title="시대에듀 30문항">📕 시대에듀</button>
   <button class="pill-btn quick-filter" data-cat="⭐ 즐겨찾기" title="즐겨찾기">⭐</button>
-  <button class="pill-btn" id="shuffleBtn">🔀 셔플</button>
 </div>
 
 <div class="top-bar">
@@ -442,7 +444,7 @@
 
 <div class="nav">
   <button id="prevBtn">◀ 이전</button>
-  <button id="navReplayBtn" class="play-btn">▶ 재생</button>
+  <button id="navAutoplayBtn" class="play-btn">▶ 자동재생</button>
   <button id="nextBtn">다음 ▶</button>
 </div>
 
@@ -474,12 +476,17 @@ const LS_AUDIO = 'kiip_trang_audio';
 const LS_FAVS = 'kiip_trang_favs';
 const LS_CAT = 'kiip_trang_cat';
 const LS_PAGE = 'kiip_trang_page';
+const LS_SHUFFLE = 'kiip_trang_shuffle';
 
 // 상태
 let audioOn = localStorage.getItem(LS_AUDIO) !== 'off';
 let favs = new Set(JSON.parse(localStorage.getItem(LS_FAVS) || '[]'));
 let activeCat = localStorage.getItem(LS_CAT) || '전체';
+let shuffleMode = localStorage.getItem(LS_SHUFFLE) === 'on';
+let autoPlayMode = false;  // 자동재생 (세션 한정)
+let autoPlayPhase = 'idle';  // idle | question | answer | waiting
 let filtered = [];
+let originalOrder = [];  // 셔플 해제 시 복원용
 let page = 0;
 
 // 카테고리별 카운트 계산
@@ -499,10 +506,13 @@ function applyFilter(cat) {
   else if (cat === '⭐ 토픽스쿨 전체') filtered = DATA.filter(d => d.ch === '토픽스쿨');
   else if (cat === '⭐ 시대에듀 전체') filtered = DATA.filter(d => d.ch === '시대에듀');
   else filtered = DATA.filter(d => d.cat === cat);
+  originalOrder = [...filtered];
+  if (shuffleMode) doShuffle();
   page = 0;
   document.getElementById('catBtnLabel').textContent = cat;
   updateQuickFilterButtons();
   closeCatModal();
+  stopAutoPlay();
   if (filtered.length === 0) {
     showEmptyState();
   } else {
@@ -528,11 +538,21 @@ function showEmptyState() {
   document.getElementById('nextBtn').disabled = true;
 }
 
-// 분류 모달 렌더링
-function renderCatModal() {
+// 분류 모달 렌더링 (scope: 'all' | 'topiks' | 'sidae')
+function renderCatModal(scope = 'all') {
   const container = document.getElementById('catGroups');
   container.innerHTML = '';
-  CAT_GROUPS.forEach(group => {
+  let groupsToShow = CAT_GROUPS;
+  if (scope === 'topiks') {
+    groupsToShow = CAT_GROUPS.filter(g => g.title.includes('토픽스쿨'));
+    document.querySelector('.modal-title').textContent = '📘 토픽스쿨 분류';
+  } else if (scope === 'sidae') {
+    groupsToShow = CAT_GROUPS.filter(g => g.title.includes('시대에듀'));
+    document.querySelector('.modal-title').textContent = '📕 시대에듀 분류';
+  } else {
+    document.querySelector('.modal-title').textContent = '📂 분류 선택';
+  }
+  groupsToShow.forEach(group => {
     const section = document.createElement('div');
     section.className = 'cat-section';
     section.innerHTML = `<div class="cat-section-title">${group.title}</div>`;
@@ -552,21 +572,23 @@ function renderCatModal() {
   });
 }
 
-function openCatModal() {
-  renderCatModal();
+function openCatModal(scope = 'all') {
+  renderCatModal(scope);
   document.getElementById('catModal').classList.add('show');
 }
 function closeCatModal() {
   document.getElementById('catModal').classList.remove('show');
 }
 
-document.getElementById('catBtn').onclick = openCatModal;
+document.getElementById('catBtn').onclick = () => openCatModal('all');
+document.getElementById('topiksBtn').onclick = () => openCatModal('topiks');
+document.getElementById('sidaeBtn').onclick = () => openCatModal('sidae');
 document.getElementById('catModalClose').onclick = closeCatModal;
 document.getElementById('catModal').onclick = (e) => {
   if (e.target.id === 'catModal') closeCatModal();
 };
 
-// 빠른 필터 버튼 (📘 토픽스쿨, 📕 시대에듀, ⭐ 즐겨찾기)
+// 빠른 필터 버튼 (⭐ 즐겨찾기)
 document.querySelectorAll('.quick-filter').forEach(btn => {
   btn.onclick = () => applyFilter(btn.dataset.cat);
 });
@@ -575,6 +597,15 @@ function updateQuickFilterButtons() {
   document.querySelectorAll('.quick-filter').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.cat === activeCat);
   });
+  // 채널 버튼 활성화 표시
+  const topiksBtn = document.getElementById('topiksBtn');
+  const sidaeBtn = document.getElementById('sidaeBtn');
+  const isTopiks = activeCat === '⭐ 토픽스쿨 전체' ||
+    Object.values({"1과. 한국생활 적응": "한국생활", "2과. 가족의 변화": "가족", "3과. 생활 속의 과학": "과학기술", "4과. 한국의 의례": "의례", "5과. 문화유산": "문화유산", "6과. 세계화 시대": "세계화", "7과. 현대인의 질병": "건강", "8과. 정보화 사회": "정보화", "9과. 사건과 사고": "사건사고", "10과. 언어생활": "언어", "11과. 교육 제도": "교육", "12과. 선거와 투표": "정치", "13과. 환경 보호": "환경", "14과. 생활과 경제": "경제", "15과. 법과 질서": "법질서", "16과. 이민 생활": "이민"}).includes(activeCat);
+  const isSidae = activeCat === '⭐ 시대에듀 전체' ||
+    ['제1회','제2회','제3회','제4회','제5회','제6회'].includes(activeCat);
+  topiksBtn.classList.toggle('active', isTopiks);
+  sidaeBtn.classList.toggle('active', isSidae);
 }
 
 // 즐겨찾기 토글
@@ -615,8 +646,104 @@ function playAudio(src) {
   });
 }
 
-audioPlayer.onended = () => setAudioStatus('완료', false);
-audioPlayer.onerror = () => setAudioStatus('파일 없음', false);
+audioPlayer.onended = () => {
+  setAudioStatus('완료', false);
+  // 자동재생 진행
+  if (autoPlayMode && filtered.length) {
+    if (autoPlayPhase === 'question') {
+      // 답변으로 플립 + 답변 재생
+      autoPlayPhase = 'answer';
+      const card = document.getElementById('cardEl');
+      if (card && !card.classList.contains('flipped')) {
+        card.classList.add('flipped');
+      }
+      const c = filtered[page];
+      setTimeout(() => {
+        if (autoPlayMode) playAudio(`audio/a${c.no}.mp3`);
+      }, 600);
+    } else if (autoPlayPhase === 'answer') {
+      // 다음 카드로 이동
+      autoPlayPhase = 'waiting';
+      setTimeout(() => {
+        if (!autoPlayMode) return;
+        if (page < filtered.length - 1) {
+          page++;
+          autoPlayPhase = 'question';  // 먼저 설정 → render의 자동 재생이 흐름 유지
+          render();
+        } else {
+          stopAutoPlay();
+          setAudioStatus('마지막 카드');
+        }
+      }, 1500);
+    }
+  }
+};
+audioPlayer.onerror = () => {
+  setAudioStatus('파일 없음', false);
+  if (autoPlayMode) stopAutoPlay();
+};
+
+function startAutoPlay() {
+  if (!audioOn || !filtered.length) return;
+  autoPlayMode = true;
+  autoPlayPhase = 'question';
+  updateAutoPlayButton();
+  const card = document.getElementById('cardEl');
+  const c = filtered[page];
+  if (card && card.classList.contains('flipped')) {
+    card.classList.remove('flipped');
+    setTimeout(() => playAudio(`audio/q${c.no}.mp3`), 600);
+  } else {
+    playAudio(`audio/q${c.no}.mp3`);
+  }
+}
+
+function stopAutoPlay() {
+  autoPlayMode = false;
+  autoPlayPhase = 'idle';
+  audioPlayer.pause();
+  updateAutoPlayButton();
+}
+
+function toggleAutoPlay() {
+  if (autoPlayMode) stopAutoPlay();
+  else startAutoPlay();
+}
+
+function updateAutoPlayButton() {
+  const btn = document.getElementById('navAutoplayBtn');
+  if (!btn) return;
+  if (autoPlayMode) {
+    btn.textContent = '⏸ 정지';
+    btn.classList.add('playing');
+  } else {
+    btn.textContent = '▶ 자동재생';
+    btn.classList.remove('playing');
+  }
+  btn.classList.toggle('muted', !audioOn);
+  btn.disabled = !audioOn;
+}
+
+// 셔플/순서 토글
+function doShuffle() {
+  for (let i = filtered.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+  }
+}
+
+function toggleShuffle() {
+  shuffleMode = !shuffleMode;
+  localStorage.setItem(LS_SHUFFLE, shuffleMode ? 'on' : 'off');
+  if (shuffleMode) {
+    doShuffle();
+  } else {
+    filtered = [...originalOrder];
+  }
+  page = 0;
+  stopAutoPlay();
+  render();
+}
 
 function updateCardAudioButtons() {
   document.querySelectorAll('.card-audio-toggle').forEach(btn => {
@@ -630,11 +757,6 @@ function updateCardAudioButtons() {
       btn.classList.add('audio-off');
     }
   });
-  const navBtn = document.getElementById('navReplayBtn');
-  if (navBtn) {
-    navBtn.classList.toggle('muted', !audioOn);
-    navBtn.disabled = !audioOn;
-  }
 }
 
 function toggleAudio() {
@@ -643,10 +765,12 @@ function toggleAudio() {
   if (!audioOn) {
     audioPlayer.pause();
     setAudioStatus('음소거');
+    if (autoPlayMode) stopAutoPlay();
   } else {
     setAudioStatus('대기');
   }
   updateCardAudioButtons();
+  updateAutoPlayButton();
 }
 
 // 카드 렌더링
@@ -687,6 +811,7 @@ function render() {
           <div class="card-audio">
             <span class="status">대기</span>
             <button class="${audioOnClass} card-audio-toggle" title="음성 ON/OFF (M)">${audioLabel}</button>
+            <button class="card-shuffle-toggle ${shuffleMode ? 'shuffle-on' : ''}" title="셔플/순서 (S)">${shuffleMode ? '🔀 셔플' : '🔢 순서'}</button>
           </div>
         </div>
       </div>
@@ -729,6 +854,10 @@ function render() {
   container.querySelectorAll('.card-audio-toggle').forEach(btn => {
     btn.onclick = (e) => { e.stopPropagation(); toggleAudio(); };
   });
+  // 카드 내 셔플/순서 토글
+  container.querySelectorAll('.card-shuffle-toggle').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); toggleShuffle(); };
+  });
 
   wrapper.appendChild(container);
 
@@ -752,27 +881,10 @@ function next() {
 function prev() {
   if (page > 0) { page--; render(); }
 }
-function shuffle() {
-  for (let i = filtered.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
-  }
-  page = 0;
-  render();
-}
 
-document.getElementById('prevBtn').onclick = prev;
-document.getElementById('nextBtn').onclick = next;
-document.getElementById('shuffleBtn').onclick = shuffle;
-
-function replayCurrent() {
-  if (!audioOn || !filtered.length) return;
-  const card = document.getElementById('cardEl');
-  const c = filtered[page];
-  if (card && card.classList.contains('flipped')) playAudio(`audio/a${c.no}.mp3`);
-  else playAudio(`audio/q${c.no}.mp3`);
-}
-document.getElementById('navReplayBtn').onclick = replayCurrent;
+document.getElementById('prevBtn').onclick = () => { stopAutoPlay(); prev(); };
+document.getElementById('nextBtn').onclick = () => { stopAutoPlay(); next(); };
+document.getElementById('navAutoplayBtn').onclick = toggleAutoPlay;
 
 document.addEventListener('keydown', (e) => {
   if (document.getElementById('catModal').classList.contains('show')) {
@@ -790,8 +902,9 @@ document.addEventListener('keydown', (e) => {
     }
   } else if (e.key === 'ArrowLeft') prev();
   else if (e.key === 'ArrowRight') next();
-  else if (e.key === 'r' || e.key === 'R') replayCurrent();
+  else if (e.key === 'r' || e.key === 'R') toggleAutoPlay();
   else if (e.key === 'm' || e.key === 'M') toggleAudio();
+  else if (e.key === 's' || e.key === 'S') toggleShuffle();
   else if (e.key === 'f' || e.key === 'F') {
     if (filtered.length) toggleFav(filtered[page].no);
   }

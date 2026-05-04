@@ -66,6 +66,9 @@
   .pill-btn.audio-on { background: #10b981; border-color: #10b981; color: #fff; }
   .pill-btn.audio-off { opacity: 0.6; }
   .pill-btn.fav-active { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+  .pill-btn.quick-filter.active[data-cat="⭐ 토픽스쿨 전체"] { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .pill-btn.quick-filter.active[data-cat="⭐ 시대에듀 전체"] { background: #c0504d; border-color: #c0504d; color: #fff; }
+  .pill-btn.quick-filter.active[data-cat="⭐ 즐겨찾기"] { background: #f59e0b; border-color: #f59e0b; color: #fff; }
   .pill-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
   .audio-status {
@@ -215,14 +218,45 @@
     flex-grow: 1;
     white-space: pre-wrap;
   }
-  .hint {
-    text-align: center;
-    color: #64748b;
-    font-size: 0.68rem;
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     margin-top: 1rem;
     padding-top: 0.7rem;
     border-top: 1px solid #334155;
   }
+  .hint {
+    flex: 1;
+    color: #64748b;
+    font-size: 0.68rem;
+    text-align: left;
+  }
+  .card-audio {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+  }
+  .card-audio button {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #cbd5e1;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .card-audio button:hover, .card-audio button:active { background: #334155; }
+  .card-audio button.audio-on { background: #10b981; border-color: #10b981; color: #fff; }
+  .card-audio button.audio-off { opacity: 0.5; }
+  .card-audio .status {
+    font-size: 0.65rem;
+    color: #64748b;
+  }
+  .card-audio .status.playing { color: #10b981; }
 
   .nav {
     display: flex;
@@ -382,6 +416,9 @@
 
 <div class="toolbar">
   <button class="pill-btn" id="catBtn">📂 <span id="catBtnLabel">전체</span></button>
+  <button class="pill-btn quick-filter" data-cat="⭐ 토픽스쿨 전체" title="토픽스쿨 47문항">📘 토픽스쿨</button>
+  <button class="pill-btn quick-filter" data-cat="⭐ 시대에듀 전체" title="시대에듀 30문항">📕 시대에듀</button>
+  <button class="pill-btn quick-filter" data-cat="⭐ 즐겨찾기" title="즐겨찾기">⭐</button>
   <button class="pill-btn" id="shuffleBtn">🔀 셔플</button>
 </div>
 
@@ -392,12 +429,6 @@
 
 <div class="cards-wrapper">
   <div id="cardsWrapper"></div>
-</div>
-
-<div class="audio-bar">
-  <button class="pill-btn audio-on" id="audioToggle">🔊 음성 ON</button>
-  <button class="pill-btn" id="replayBtn">▶ 재생</button>
-  <span class="audio-status" id="audioStatus">대기</span>
 </div>
 
 <div class="nav">
@@ -460,6 +491,7 @@ function applyFilter(cat) {
   else filtered = DATA.filter(d => d.cat === cat);
   page = 0;
   document.getElementById('catBtnLabel').textContent = cat;
+  updateQuickFilterButtons();
   closeCatModal();
   if (filtered.length === 0) {
     showEmptyState();
@@ -524,6 +556,17 @@ document.getElementById('catModal').onclick = (e) => {
   if (e.target.id === 'catModal') closeCatModal();
 };
 
+// 빠른 필터 버튼 (📘 토픽스쿨, 📕 시대에듀, ⭐ 즐겨찾기)
+document.querySelectorAll('.quick-filter').forEach(btn => {
+  btn.onclick = () => applyFilter(btn.dataset.cat);
+});
+
+function updateQuickFilterButtons() {
+  document.querySelectorAll('.quick-filter').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.cat === activeCat);
+  });
+}
+
 // 즐겨찾기 토글
 function toggleFav(no) {
   if (favs.has(no)) favs.delete(no);
@@ -543,58 +586,53 @@ function toggleFav(no) {
 
 // 음성 컨트롤
 const audioPlayer = document.getElementById('audioPlayer');
-const audioStatus = document.getElementById('audioStatus');
 
 function setAudioStatus(text, playing = false) {
-  audioStatus.textContent = text;
-  audioStatus.classList.toggle('playing', playing);
+  document.querySelectorAll('.card-audio .status').forEach(el => {
+    el.textContent = text;
+    el.classList.toggle('playing', playing);
+  });
 }
 
 function playAudio(src) {
   if (!audioOn) return;
   audioPlayer.src = src;
-  setAudioStatus('로딩...', true);
+  setAudioStatus('로딩', true);
   audioPlayer.play().then(() => {
     setAudioStatus('재생 중', true);
   }).catch(err => {
-    setAudioStatus('재생 실패', false);
+    setAudioStatus('실패', false);
   });
 }
 
 audioPlayer.onended = () => setAudioStatus('완료', false);
 audioPlayer.onerror = () => setAudioStatus('파일 없음', false);
 
-function updateAudioToggle() {
-  const btn = document.getElementById('audioToggle');
-  if (audioOn) {
-    btn.textContent = '🔊 음성 ON';
-    btn.classList.add('audio-on');
-    btn.classList.remove('audio-off');
-  } else {
-    btn.textContent = '🔇 음성 OFF';
-    btn.classList.remove('audio-on');
-    btn.classList.add('audio-off');
-    audioPlayer.pause();
-    setAudioStatus('음소거');
-  }
+function updateCardAudioButtons() {
+  document.querySelectorAll('.card-audio-toggle').forEach(btn => {
+    if (audioOn) {
+      btn.textContent = '🔊 음성';
+      btn.classList.add('audio-on');
+      btn.classList.remove('audio-off');
+    } else {
+      btn.textContent = '🔇 음소거';
+      btn.classList.remove('audio-on');
+      btn.classList.add('audio-off');
+    }
+  });
 }
 
-document.getElementById('audioToggle').onclick = () => {
+function toggleAudio() {
   audioOn = !audioOn;
   localStorage.setItem(LS_AUDIO, audioOn ? 'on' : 'off');
-  updateAudioToggle();
-};
-
-document.getElementById('replayBtn').onclick = () => {
-  if (!audioOn || !filtered.length) return;
-  const card = document.getElementById('cardEl');
-  const c = filtered[page];
-  if (card && card.classList.contains('flipped')) {
-    playAudio(`audio/a${c.no}.mp3`);
+  if (!audioOn) {
+    audioPlayer.pause();
+    setAudioStatus('음소거');
   } else {
-    playAudio(`audio/q${c.no}.mp3`);
+    setAudioStatus('대기');
   }
-};
+  updateCardAudioButtons();
+}
 
 // 카드 렌더링
 function render() {
@@ -615,6 +653,9 @@ function render() {
 
   const container = document.createElement('div');
   container.className = 'card-container';
+  const audioOnClass = audioOn ? 'audio-on' : 'audio-off';
+  const audioLabel = audioOn ? '🔊 음성' : '🔇 음소거';
+
   container.innerHTML = `
     <div class="card" id="cardEl">
       <div class="card-face card-front">
@@ -626,7 +667,14 @@ function render() {
           <span class="tag ${typeClass}">${typeTag}</span>
         </div>
         <h2>${c.q}</h2>
-        <div class="hint">탭 또는 Space → 답변 보기</div>
+        <div class="card-footer">
+          <span class="hint">탭/Space → 답변</span>
+          <div class="card-audio">
+            <span class="status" id="audioStatusFront">대기</span>
+            <button class="${audioOnClass} card-audio-toggle" title="음성 ON/OFF (M)">${audioLabel}</button>
+            <button class="card-audio-replay" title="재생 (R)">▶</button>
+          </div>
+        </div>
       </div>
       <div class="card-face card-back">
         <button class="fav-btn ${favClass}" id="favBtnBack" title="즐겨찾기 (F)">${favIcon}</button>
@@ -638,13 +686,20 @@ function render() {
         </div>
         <div class="answer-label">짱(Trang)의 답변</div>
         <div class="answer">${c.a}</div>
-        <div class="hint">탭 또는 Space → 질문 보기</div>
+        <div class="card-footer">
+          <span class="hint">탭/Space → 질문</span>
+          <div class="card-audio">
+            <span class="status" id="audioStatusBack">대기</span>
+            <button class="${audioOnClass} card-audio-toggle" title="음성 ON/OFF (M)">${audioLabel}</button>
+            <button class="card-audio-replay" title="재생 (R)">▶</button>
+          </div>
+        </div>
       </div>
     </div>
   `;
-  // 카드 클릭 = 뒤집기 (즐겨찾기 버튼 클릭 제외)
+  // 카드 클릭 = 뒤집기 (즐겨찾기/음성 버튼 클릭 제외)
   container.onclick = (e) => {
-    if (e.target.closest('.fav-btn')) return;
+    if (e.target.closest('.fav-btn') || e.target.closest('.card-audio')) return;
     const card = container.querySelector('.card');
     card.classList.toggle('flipped');
     if (card.classList.contains('flipped')) {
@@ -656,6 +711,19 @@ function render() {
   // 즐겨찾기 버튼 클릭
   container.querySelector('#favBtnFront').onclick = (e) => { e.stopPropagation(); toggleFav(c.no); };
   container.querySelector('#favBtnBack').onclick = (e) => { e.stopPropagation(); toggleFav(c.no); };
+  // 카드 내 음성 컨트롤
+  container.querySelectorAll('.card-audio-toggle').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); toggleAudio(); };
+  });
+  container.querySelectorAll('.card-audio-replay').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (!audioOn) return;
+      const card = document.getElementById('cardEl');
+      if (card.classList.contains('flipped')) playAudio(`audio/a${c.no}.mp3`);
+      else playAudio(`audio/q${c.no}.mp3`);
+    };
+  });
 
   wrapper.appendChild(container);
 
@@ -708,8 +776,14 @@ document.addEventListener('keydown', (e) => {
     }
   } else if (e.key === 'ArrowLeft') prev();
   else if (e.key === 'ArrowRight') next();
-  else if (e.key === 'r' || e.key === 'R') document.getElementById('replayBtn').click();
-  else if (e.key === 'm' || e.key === 'M') document.getElementById('audioToggle').click();
+  else if (e.key === 'r' || e.key === 'R') {
+    if (!audioOn || !filtered.length) return;
+    const card = document.getElementById('cardEl');
+    const c = filtered[page];
+    if (card.classList.contains('flipped')) playAudio(`audio/a${c.no}.mp3`);
+    else playAudio(`audio/q${c.no}.mp3`);
+  }
+  else if (e.key === 'm' || e.key === 'M') toggleAudio();
   else if (e.key === 'f' || e.key === 'F') {
     if (filtered.length) toggleFav(filtered[page].no);
   }
@@ -724,7 +798,6 @@ document.addEventListener('touchend', (e) => {
 });
 
 // 초기화
-updateAudioToggle();
 applyFilter(activeCat);
 const savedPage = parseInt(localStorage.getItem(LS_PAGE) || '0');
 if (savedPage > 0 && savedPage < filtered.length) {

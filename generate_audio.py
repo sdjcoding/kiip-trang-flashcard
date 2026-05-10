@@ -62,6 +62,12 @@ def load_data():
         if row[0]:
             _, _, _, q, a = row
             items.append((q, a))
+    # 박쌤 구술시험 (10개)
+    if "박쌤 구술시험" in wb.sheetnames:
+        for row in wb["박쌤 구술시험"].iter_rows(min_row=2, values_only=True):
+            if row[0]:
+                _, _, _, _, q, a = row
+                items.append((q, a))
     return items
 
 

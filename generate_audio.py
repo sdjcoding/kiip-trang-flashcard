@@ -68,6 +68,12 @@ def load_data():
             if row[0]:
                 _, _, _, _, q, a = row
                 items.append((q, a))
+    # 시대에듀 작문 (6개)
+    if "시대에듀 작문" in wb.sheetnames:
+        for row in wb["시대에듀 작문"].iter_rows(min_row=2, values_only=True):
+            if row[0]:
+                _, _, _, q, a = row
+                items.append((q, a))
     return items
 
 

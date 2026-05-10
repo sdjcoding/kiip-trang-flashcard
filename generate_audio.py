@@ -62,8 +62,13 @@ def load_data():
         if row[0]:
             _, _, _, q, a = row
             items.append((q, a))
-    # 박쌤 구술시험 (10개)
-    if "박쌤 구술시험" in wb.sheetnames:
+    # 박쌤 구술 (10개) - 영상 7, 8, 36
+    if "박쌤 구술" in wb.sheetnames:
+        for row in wb["박쌤 구술"].iter_rows(min_row=2, values_only=True):
+            if row[0]:
+                _, _, _, _, q, a = row
+                items.append((q, a))
+    elif "박쌤 구술시험" in wb.sheetnames:  # 구버전 호환
         for row in wb["박쌤 구술시험"].iter_rows(min_row=2, values_only=True):
             if row[0]:
                 _, _, _, _, q, a = row
@@ -71,6 +76,12 @@ def load_data():
     # 시대에듀 작문 (6개)
     if "시대에듀 작문" in wb.sheetnames:
         for row in wb["시대에듀 작문"].iter_rows(min_row=2, values_only=True):
+            if row[0]:
+                _, _, _, q, a = row
+                items.append((q, a))
+    # 박쌤 작문 (6개) - 영상 31, 34, 35
+    if "박쌤 작문" in wb.sheetnames:
+        for row in wb["박쌤 작문"].iter_rows(min_row=2, values_only=True):
             if row[0]:
                 _, _, _, q, a = row
                 items.append((q, a))
